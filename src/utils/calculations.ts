@@ -1,8 +1,8 @@
-import { AppState, Game, Player } from '../types';
+import { AppState, Game, PlayerSummary } from '../types';
 
 export function gameTotalCost(g: Game): number {
   const extras = g.extraExpenses.reduce((s, e) => s + e.amount, 0);
-  return g.courtCost + g.shuttlesUsed * g.shuttleUnitCost + extras;
+  return g.courtCost + g.shuttleAmountCollected + extras;
 }
 
 export function perPlayerShare(g: Game): number {
@@ -15,17 +15,30 @@ export function amountPaid(g: Game, playerId: string): number {
   return p && p.paid ? p.amount : 0;
 }
 
-// Net balance: positive => others owe player (credit); negative => player owes
 export function playerBalance(state: AppState, playerId: string): number {
   let balance = 0;
   for (const g of state.games) {
     if (!g.completed) continue;
     if (!g.playerIds.includes(playerId)) continue;
-    const share = perPlayerShare(g);
-    const paid = amountPaid(g, playerId);
-    balance += paid - share;
+    balance += amountPaid(g, playerId) - perPlayerShare(g);
   }
   return balance;
+}
+
+export function playerSummaries(state: AppState): PlayerSummary[] {
+  return state.players.map(p => {
+    const games = state.games.filter(g => g.playerIds.includes(p.id));
+    let lastPlayed: string | null = null;
+    for (const g of games) {
+      if (!lastPlayed || g.date > lastPlayed) lastPlayed = g.date;
+    }
+    return {
+      player: p,
+      balance: playerBalance(state, p.id),
+      lastPlayed,
+      gamesPlayed: games.length,
+    };
+  });
 }
 
 export function myStats(state: AppState) {
@@ -39,7 +52,6 @@ export function myStats(state: AppState) {
   const myPayments = state.games.reduce((s, g) => s + amountPaid(g, me), 0);
   const totalGameCost = myGames.reduce((s, g) => s + gameTotalCost(g), 0);
   const profitLoss = myPayments - myShares;
-  const myExpenseShare = state.expenses.reduce((s, e) => s + e.amount, 0); // for info
   return {
     myGames: myGames.length,
     totalCollected,
@@ -47,7 +59,6 @@ export function myStats(state: AppState) {
     myPayments,
     totalGameCost,
     profitLoss,
-    myExpenseShare,
   };
 }
 
@@ -56,3 +67,13 @@ export function playerGames(state: AppState, playerId: string): Game[] {
     .filter(g => g.playerIds.includes(playerId))
     .sort((a, b) => (a.date < b.date ? 1 : -1));
 }
+
+export function durationLabel(mins: number): string {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h === 0) return `${m} min`;
+  if (m === 0) return `${h} Hr`;
+  return `${h} Hr ${m} min`;
+}
+
+export const DURATION_OPTIONS: number[] = [60, 90, 120, 150, 180];

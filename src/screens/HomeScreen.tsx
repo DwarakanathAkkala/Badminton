@@ -3,7 +3,7 @@ import { ScrollView, View, Text, StyleSheet, Pressable } from 'react-native';
 import { useApp } from '../context/AppContext';
 import Card from '../components/Card';
 import Button from '../components/Button';
-import { gameTotalCost, perPlayerShare, playerBalance } from '../utils/calculations';
+import { gameTotalCost, perPlayerShare, durationLabel } from '../utils/calculations';
 import { RootStack } from '../../App';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
@@ -27,7 +27,11 @@ export default function HomeScreen({ navigation }: NativeStackScreenProps<RootSt
       </View>
 
       <Text style={styles.h1}>Past Games</Text>
-      {games.length === 0 && <Card><Text>No games yet. Tap "+ New Game" to start.</Text></Card>}
+      {games.length === 0 && (
+        <Card>
+          <Text>No games yet. Tap "+ New Game" to start.</Text>
+        </Card>
+      )}
       {games.map(g => {
         const players = g.playerIds
           .map(id => state.players.find(p => p.id === id)?.name || '?')
@@ -36,12 +40,17 @@ export default function HomeScreen({ navigation }: NativeStackScreenProps<RootSt
           <Pressable key={g.id} onPress={() => navigation.navigate('GameDetail', { id: g.id })}>
             <Card>
               <View style={styles.rowBetween}>
-                <Text style={styles.gameDate}>{new Date(g.date).toLocaleDateString()}</Text>
+                <Text style={styles.gameDate}>
+                  {new Date(g.date).toLocaleDateString()} •{' '}
+                  {new Date(g.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </Text>
                 <Text style={[styles.badge, g.completed ? styles.badgeOk : styles.badgePending]}>
                   {g.completed ? 'Completed' : 'Pending'}
                 </Text>
               </View>
-              <Text style={{ color: '#555', marginTop: 4 }}>{g.venue}</Text>
+              <Text style={{ color: '#555', marginTop: 4 }}>
+                {g.courtName} • {g.numCourts} court(s) • {durationLabel(g.durationMinutes)}
+              </Text>
               <Text style={{ marginTop: 6, color: '#333' }}>{players}</Text>
               <View style={[styles.rowBetween, { marginTop: 8 }]}>
                 <Text style={{ color: '#666' }}>Total: ₹{gameTotalCost(g).toFixed(0)}</Text>
@@ -59,8 +68,15 @@ const styles = StyleSheet.create({
   quickRow: { flexDirection: 'row', marginBottom: 8 },
   h1: { fontSize: 20, fontWeight: '700', marginVertical: 16 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  gameDate: { fontWeight: '700', fontSize: 16 },
-  badge: { fontSize: 12, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, overflow: 'hidden' },
+  gameDate: { fontWeight: '700', fontSize: 16, flexShrink: 1 },
+  badge: {
+    fontSize: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    overflow: 'hidden',
+    marginLeft: 8,
+  },
   badgeOk: { backgroundColor: '#d1e7dd', color: '#0f5132' },
   badgePending: { backgroundColor: '#fff3cd', color: '#664d03' },
 });

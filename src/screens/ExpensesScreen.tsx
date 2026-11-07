@@ -5,8 +5,7 @@ import Card from '../components/Card';
 import Field from '../components/Field';
 import Button from '../components/Button';
 import { Expense } from '../types';
-
-const uid = () => Math.random().toString(36).slice(2, 10);
+import { uid } from '../db/database';
 
 export default function ExpensesScreen() {
   const { state, addExpense } = useApp();
@@ -20,27 +19,37 @@ export default function ExpensesScreen() {
         <Text style={{ fontWeight: '700', marginBottom: 8 }}>Add Expense</Text>
         <Field label="Label" value={label} onChangeText={setLabel} placeholder="e.g. Membership" />
         <Field label="Amount (₹)" value={amount} onChangeText={setAmount} keyboardType="numeric" />
-        <Field label="Date" value={date} onChangeText={setDate} />
+        <Field label="Date (YYYY-MM-DD)" value={date} onChangeText={setDate} />
         <Button
           title="Add Expense"
-          onPress={() => {
+          onPress={async () => {
             if (!label || !amount) return;
             const e: Expense = {
-              id: uid(), label, amount: Number(amount),
-              date: new Date(date).toISOString(), category: 'other',
+              id: uid(),
+              label,
+              amount: Number(amount),
+              date: new Date(date).toISOString(),
+              category: 'other',
             };
-            addExpense(e);
-            setLabel(''); setAmount('');
+            await addExpense(e);
+            setLabel('');
+            setAmount('');
           }}
         />
       </Card>
 
       <Text style={{ fontWeight: '700', fontSize: 18, marginVertical: 8 }}>Expenses</Text>
-      {state.expenses.length === 0 && <Card><Text>No expenses yet.</Text></Card>}
+      {state.expenses.length === 0 && (
+        <Card>
+          <Text>No expenses yet.</Text>
+        </Card>
+      )}
       {state.expenses.map(e => (
         <Card key={e.id}>
           <Text style={{ fontWeight: '700' }}>{e.label}</Text>
-          <Text style={{ color: '#555' }}>₹{e.amount} • {new Date(e.date).toDateString()}</Text>
+          <Text style={{ color: '#555' }}>
+            ₹{e.amount} • {new Date(e.date).toDateString()}
+          </Text>
         </Card>
       ))}
     </ScrollView>

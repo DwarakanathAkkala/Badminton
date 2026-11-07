@@ -21,11 +21,13 @@ export default function DashboardScreen() {
 
       <Card>
         <Text style={styles.title}>Profit / Loss (after my share)</Text>
-        <Text style={{
-          fontSize: 30, fontWeight: '800',
-          color: net >= 0 ? '#0f5132' : '#842029',
-          textAlign: 'center',
-        }}>
+        <Text
+          style={{
+            fontSize: 30,
+            fontWeight: '800',
+            color: net >= 0 ? '#0f5132' : '#842029',
+            textAlign: 'center',
+          }}>
           {net >= 0 ? '+' : '-'}₹{Math.abs(net).toFixed(0)}
         </Text>
         <Text style={{ textAlign: 'center', color: '#555', marginTop: 6 }}>
@@ -37,7 +39,7 @@ export default function DashboardScreen() {
         <Text style={styles.title}>Calculation Logic</Text>
         <Text style={{ color: '#444', lineHeight: 20 }}>
           Profit/Loss = (Amounts you paid) − (Your equal share of every completed game).{'\n'}
-          Equal share is derived after including court cost, shuttles used (pack cost / count) and extra expenses.
+          Each game cost = Court cost + Shuttle amount collected + Extra expenses.
         </Text>
       </Card>
     </ScrollView>

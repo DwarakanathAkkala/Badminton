@@ -3,37 +3,42 @@ export type Player = {
   name: string;
   phone?: string;
   isHost?: boolean;
+  createdAt: string;
 };
 
 export type PlayerPayment = {
   playerId: string;
   amount: number;
   paid: boolean;
-  method?: 'cash' | 'upi' | 'other';
 };
+
+export type ExtraExpense = { id: string; label: string; amount: number };
 
 export type Game = {
   id: string;
-  date: string; // ISO
-  venue: string;
+  date: string;
+  courtName: string;
+  numCourts: number;
+  durationMinutes: number;
   playerIds: string[];
   hostId: string;
   courtCost: number;
   shuttlesUsed: number;
-  // shuttle cost per shuttle computed from pack
-  shuttlePackId?: string;
-  shuttleUnitCost: number;
-  extraExpenses: { id: string; label: string; amount: number }[];
+  shuttleAmountCollected: number;
+  extraExpenses: ExtraExpense[];
   payments: PlayerPayment[];
+  shuttlePackId?: string;
+  shuttleBroken: boolean;
   notes?: string;
   completed: boolean;
+  createdAt: string;
 };
 
 export type ShuttlePack = {
   id: string;
-  code: string; // e.g. "YL-2024-01"
+  code: string;
   brand: string;
-  count: number; // usually 6
+  count: number;
   totalCost: number;
   startDate: string;
   remaining: number;
@@ -54,4 +59,11 @@ export type AppState = {
   shuttlePacks: ShuttlePack[];
   expenses: Expense[];
   myPlayerId: string;
+};
+
+export type PlayerSummary = {
+  player: Player;
+  balance: number;
+  lastPlayed: string | null;
+  gamesPlayed: number;
 };

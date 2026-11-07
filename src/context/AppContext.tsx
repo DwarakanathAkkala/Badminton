@@ -1,47 +1,123 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState, Game, Player, ShuttlePack, Expense } from '../types';
-import { loadState, saveState, DEFAULT_STATE } from '../storage/storage';
+import {
+  fetchGames, fetchPlayers, fetchShuttlePacks, fetchExpenses,
+  insertGame, insertPlayer, insertShuttlePack, insertExpense,
+  updatePlayer as dbUpdatePlayer,
+  updateGameFlag,
+  updatePayment,
+  decrementShuttle,
+} from '../db/database';
+
+const MY_PLAYER_ID_KEY = 'badminton_my_player_id';
 
 type Ctx = {
   state: AppState;
-  addGame: (g: Game) => void;
-  updateGame: (id: string, patch: Partial<Game>) => void;
-  addPlayer: (p: Player) => void;
-  addShuttlePack: (s: ShuttlePack) => void;
-  addExpense: (e: Expense) => void;
-  setMyPlayer: (id: string) => void;
+  ready: boolean;
+  setMyPlayer: (id: string) => Promise<void>;
+  addPlayer: (p: Player) => Promise<void>;
+  updatePlayer: (id: string, patch: Partial<Player>) => Promise<void>;
+  addGame: (g: Game) => Promise<void>;
+  markCompleted: (id: string, completed: boolean) => Promise<void>;
+  markShuttleBroken: (id: string, packId?: string) => Promise<void>;
+  setPayment: (gameId: string, playerId: string, amount: number, paid: boolean) => Promise<void>;
+  addShuttlePack: (p: ShuttlePack) => Promise<void>;
+  addExpense: (e: Expense) => Promise<void>;
+  refresh: () => Promise<void>;
 };
 
 const AppCtx = createContext<Ctx | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<AppState>(DEFAULT_STATE);
+  const [state, setState] = useState<AppState>({
+    players: [],
+    games: [],
+    shuttlePacks: [],
+    expenses: [],
+    myPlayerId: '',
+  });
   const [ready, setReady] = useState(false);
 
-  useEffect(() => {
-    loadState().then(s => { setState(s); setReady(true); });
+  const refresh = useCallback(async () => {
+    const [players, games, shuttlePacks, expenses, storedMyId] = await Promise.all([
+      fetchPlayers(),
+      fetchGames(),
+      fetchShuttlePacks(),
+      fetchExpenses(),
+      AsyncStorage.getItem(MY_PLAYER_ID_KEY),
+    ]);
+    const myPlayerId =
+      storedMyId ||
+      players.find(p => p.isHost)?.id ||
+      players[0]?.id ||
+      '';
+    setState({ players, games, shuttlePacks, expenses, myPlayerId });
   }, []);
 
   useEffect(() => {
-    if (ready) saveState(state);
-  }, [state, ready]);
+    (async () => {
+      await refresh();
+      setReady(true);
+    })();
+  }, [refresh]);
 
   const api = useMemo<Ctx>(() => ({
     state,
-    addGame: g => setState(s => ({ ...s, games: [g, ...s.games] })),
-    updateGame: (id, patch) =>
-      setState(s => ({ ...s, games: s.games.map(g => (g.id === id ? { ...g, ...patch } : g)) })),
-    addPlayer: p => setState(s => ({ ...s, players: [...s.players, p] })),
-    addShuttlePack: sp => setState(s => ({ ...s, shuttlePacks: [sp, ...s.shuttlePacks] })),
-    addExpense: e => setState(s => ({ ...s, expenses: [e, ...s.expenses] })),
-    setMyPlayer: id => setState(s => ({ ...s, myPlayerId: id })),
-  }), [state, ready]);
+    ready,
+    setMyPlayer: async (id: string) => {
+      await AsyncStorage.setItem(MY_PLAYER_ID_KEY, id);
+      setState(s => ({ ...s, myPlayerId: id }));
+    },
+    addPlayer: async (p: Player) => {
+      await insertPlayer(p);
+      await refresh();
+    },
+    updatePlayer: async (id: string, patch: Partial<Player>) => {
+      await dbUpdatePlayer(id, patch);
+      await refresh();
+    },
+    addGame: async (g: Game) => {
+      await insertGame(g);
+      if (g.shuttleBroken && g.shuttlePackId) {
+        await decrementShuttle(g.shuttlePackId);
+      }
+      await refresh();
+    },
+    markCompleted: async (id: string, completed: boolean) => {
+      await updateGameFlag(id, { completed });
+      await refresh();
+    },
+    markShuttleBroken: async (id: string, packId?: string) => {
+      const game = state.games.find(g => g.id === id);
+      const wasBroken = !!game?.shuttleBroken;
+      await updateGameFlag(id, { shuttleBroken: !wasBroken });
+      const targetPack = packId || game?.shuttlePackId;
+      if (!wasBroken && targetPack) {
+        await decrementShuttle(targetPack);
+      }
+      await refresh();
+    },
+    setPayment: async (gameId: string, playerId: string, amount: number, paid: boolean) => {
+      await updatePayment(gameId, playerId, amount, paid);
+      await refresh();
+    },
+    addShuttlePack: async (p: ShuttlePack) => {
+      await insertShuttlePack(p);
+      await refresh();
+    },
+    addExpense: async (e: Expense) => {
+      await insertExpense(e);
+      await refresh();
+    },
+    refresh,
+  }), [state, ready, refresh]);
 
   if (!ready) return null;
   return <AppCtx.Provider value={api}>{children}</AppCtx.Provider>;
 }
 
-export function useApp() {
+export function useApp(): Ctx {
   const c = useContext(AppCtx);
   if (!c) throw new Error('useApp outside provider');
   return c;

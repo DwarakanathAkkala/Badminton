@@ -1,44 +1,59 @@
 import React from 'react';
-import { ScrollView, Text, View, StyleSheet } from 'react-native';
+import { ScrollView, Text, View, StyleSheet, Pressable } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStack } from '../../App';
 import { useApp } from '../context/AppContext';
 import Card from '../components/Card';
 import Button from '../components/Button';
-import Field from '../components/Field';
-import { gameTotalCost, perPlayerShare } from '../utils/calculations';
+import { gameTotalCost, perPlayerShare, durationLabel } from '../utils/calculations';
 
-export default function GameDetailScreen({ route, navigation }: NativeStackScreenProps<RootStack, 'GameDetail'>) {
-  const { state, updateGame } = useApp();
+export default function GameDetailScreen({
+  route,
+  navigation,
+}: NativeStackScreenProps<RootStack, 'GameDetail'>) {
+  const { state, markCompleted, markShuttleBroken, setPayment } = useApp();
   const game = state.games.find(g => g.id === route.params.id);
   if (!game) return <Text style={{ padding: 20 }}>Game not found</Text>;
 
   const total = gameTotalCost(game);
   const share = perPlayerShare(game);
 
-  const setPaid = (playerId: string, paid: boolean) => {
-    const payments = game.payments.map(p =>
-      p.playerId === playerId ? { ...p, paid, amount: paid ? share : 0 } : p,
-    );
-    // If some player not present in payments, add
-    if (!payments.find(p => p.playerId === playerId)) {
-      payments.push({ playerId, paid, amount: paid ? share : 0 });
-    }
-    updateGame(game.id, { payments });
-  };
-
   return (
     <ScrollView contentContainerStyle={{ padding: 16, maxWidth: 900, alignSelf: 'center', width: '100%' }}>
       <Card>
-        <Text style={styles.title}>{new Date(game.date).toDateString()}</Text>
-        <Text style={{ color: '#555' }}>{game.venue}</Text>
+        <Text style={styles.title}>
+          {new Date(game.date).toLocaleDateString()} •{' '}
+          {new Date(game.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </Text>
+        <Text style={{ color: '#555' }}>
+          {game.courtName} • {game.numCourts} court(s) • {durationLabel(game.durationMinutes)}
+        </Text>
         <View style={{ marginTop: 8 }}>
           <Row label="Court" value={`₹${game.courtCost}`} />
-          <Row label={`Shuttles (${game.shuttlesUsed})`} value={`₹${(game.shuttlesUsed * game.shuttleUnitCost).toFixed(0)}`} />
-          {game.extraExpenses.map(e => <Row key={e.id} label={e.label} value={`₹${e.amount}`} />)}
+          <Row
+            label={`Shuttle Amount (used ${game.shuttlesUsed})`}
+            value={`₹${game.shuttleAmountCollected}`}
+          />
+          {game.extraExpenses.map(e => (
+            <Row key={e.id} label={e.label} value={`₹${e.amount}`} />
+          ))}
           <Row label="Total" value={`₹${total.toFixed(0)}`} bold />
           <Row label="Per Player" value={`₹${share.toFixed(0)}`} bold />
         </View>
+      </Card>
+
+      <Card>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Text style={styles.title}>Shuttle Broken</Text>
+          <Pressable
+            onPress={() => { void markShuttleBroken(game.id, game.shuttlePackId); }}
+            style={[styles.checkbox, game.shuttleBroken && styles.checkboxOn]}>
+            {game.shuttleBroken && <Text style={{ color: '#fff', fontWeight: '900' }}>✓</Text>}
+          </Pressable>
+        </View>
+        <Text style={{ color: '#666', fontSize: 12, marginTop: 4 }}>
+          Toggling ON will decrement the linked pack's remaining shuttle count by 1.
+        </Text>
       </Card>
 
       <Card>
@@ -49,14 +64,21 @@ export default function GameDetailScreen({ route, navigation }: NativeStackScree
           const paid = !!pay?.paid;
           return (
             <View key={id} style={styles.pRow}>
-              <Text style={{ flex: 1, fontWeight: '600' }}>{p?.name}{id === game.hostId ? ' (host)' : ''}</Text>
-              <Text style={{ marginRight: 8, color: paid ? 'green' : '#a00' }}>
-                {paid ? `Paid ₹${pay?.amount ?? 0}` : 'Unpaid'}
-              </Text>
+              <Pressable
+                style={{ flex: 1 }}
+                onPress={() => navigation.navigate('PlayerDetail', { id })}>
+                <Text style={{ fontWeight: '600', color: '#0d6efd' }}>
+                  {p?.name}
+                  {id === game.hostId ? ' (host)' : ''}
+                </Text>
+                <Text style={{ color: paid ? 'green' : '#a00', fontSize: 12 }}>
+                  {paid ? `Paid ₹${pay?.amount ?? 0}` : 'Unpaid'}
+                </Text>
+              </Pressable>
               <Button
-                title={paid ? 'Undo' : 'Mark Paid'}
+                title={paid ? 'Undo' : `Mark ₹${share.toFixed(0)}`}
                 variant={paid ? 'ghost' : 'primary'}
-                onPress={() => setPaid(id, !paid)}
+                onPress={() => { void setPayment(game.id, id, paid ? 0 : share, !paid); }}
                 style={{ paddingVertical: 6, paddingHorizontal: 10 }}
               />
             </View>
@@ -66,7 +88,7 @@ export default function GameDetailScreen({ route, navigation }: NativeStackScree
 
       <Button
         title={game.completed ? 'Mark as Pending' : 'Mark Completed'}
-        onPress={() => updateGame(game.id, { completed: !game.completed })}
+        onPress={() => { void markCompleted(game.id, !game.completed); }}
       />
       <View style={{ height: 8 }} />
       <Button title="Back to Games" variant="ghost" onPress={() => navigation.goBack()} />
@@ -85,5 +107,22 @@ function Row({ label, value, bold }: { label: string; value: string; bold?: bool
 
 const styles = StyleSheet.create({
   title: { fontWeight: '700', fontSize: 18, marginBottom: 4 },
-  pRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderColor: '#eee' },
+  pRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderColor: '#eee',
+  },
+  checkbox: {
+    width: 26,
+    height: 26,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#0d6efd',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+  },
+  checkboxOn: { backgroundColor: '#0d6efd' },
 });
