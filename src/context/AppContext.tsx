@@ -1,13 +1,11 @@
 import React, { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useSupastashFilters } from 'supastash';
 import { AppState, Game, Player, ShuttlePack, Expense } from '../types';
 import {
   fetchGames, fetchPlayers, fetchShuttlePacks, fetchExpenses,
   insertGame, insertPlayer, insertShuttlePack, insertExpense,
-  updatePlayer as dbUpdatePlayer,
-  updateGameFlag,
-  updatePayment,
-  decrementShuttle,
+  updatePlayer as dbUpdatePlayer, updateGameFlag, updatePayment, decrementShuttle,
 } from '../db/database';
 
 const MY_PLAYER_ID_KEY = 'badminton_my_player_id';
@@ -29,29 +27,26 @@ type Ctx = {
 
 const AppCtx = createContext<Ctx | null>(null);
 
-export function AppProvider({ children }: { children: React.ReactNode }) {
+export function AppProvider({ children, userId }: { children: React.ReactNode; userId: string }) {
   const [state, setState] = useState<AppState>({
-    players: [],
-    games: [],
-    shuttlePacks: [],
-    expenses: [],
-    myPlayerId: '',
+    players: [], games: [], shuttlePacks: [], expenses: [], myPlayerId: '',
   });
   const [ready, setReady] = useState(false);
 
+  useSupastashFilters({
+    players: [{ column: 'user_id', operator: 'eq', value: userId }],
+    games: [{ column: 'user_id', operator: 'eq', value: userId }],
+    payments: [{ column: 'user_id', operator: 'eq', value: userId }],
+    extra_expenses: [{ column: 'user_id', operator: 'eq', value: userId }],
+    shuttle_packs: [{ column: 'user_id', operator: 'eq', value: userId }],
+    expenses: [{ column: 'user_id', operator: 'eq', value: userId }],
+  });
+
   const refresh = useCallback(async () => {
     const [players, games, shuttlePacks, expenses, storedMyId] = await Promise.all([
-      fetchPlayers(),
-      fetchGames(),
-      fetchShuttlePacks(),
-      fetchExpenses(),
-      AsyncStorage.getItem(MY_PLAYER_ID_KEY),
+      fetchPlayers(), fetchGames(), fetchShuttlePacks(), fetchExpenses(), AsyncStorage.getItem(MY_PLAYER_ID_KEY),
     ]);
-    const myPlayerId =
-      storedMyId ||
-      players.find(p => p.isHost)?.id ||
-      players[0]?.id ||
-      '';
+    const myPlayerId = storedMyId || players.find(p => p.isHost)?.id || players[0]?.id || '';
     setState({ players, games, shuttlePacks, expenses, myPlayerId });
   }, []);
 
@@ -63,14 +58,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [refresh]);
 
   const api = useMemo<Ctx>(() => ({
-    state,
-    ready,
+    state, ready,
     setMyPlayer: async (id: string) => {
       await AsyncStorage.setItem(MY_PLAYER_ID_KEY, id);
       setState(s => ({ ...s, myPlayerId: id }));
     },
     addPlayer: async (p: Player) => {
-      await insertPlayer(p);
+      await insertPlayer(p, userId); // ✅ Passed userId
       await refresh();
     },
     updatePlayer: async (id: string, patch: Partial<Player>) => {
@@ -78,7 +72,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       await refresh();
     },
     addGame: async (g: Game) => {
-      await insertGame(g);
+      await insertGame(g, userId); // ✅ Passed userId
       if (g.shuttleBroken && g.shuttlePackId) {
         await decrementShuttle(g.shuttlePackId);
       }
@@ -93,25 +87,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const wasBroken = !!game?.shuttleBroken;
       await updateGameFlag(id, { shuttleBroken: !wasBroken });
       const targetPack = packId || game?.shuttlePackId;
-      if (!wasBroken && targetPack) {
-        await decrementShuttle(targetPack);
-      }
+      if (!wasBroken && targetPack) await decrementShuttle(targetPack);
       await refresh();
     },
-    setPayment: async (gameId: string, playerId: string, amount: number, paid: boolean) => {
-      await updatePayment(gameId, playerId, amount, paid);
+    setPayment: async (gameId, playerId, amount, paid) => {
+      await updatePayment(gameId, playerId, amount, paid, userId); // ✅ Passed userId
       await refresh();
     },
     addShuttlePack: async (p: ShuttlePack) => {
-      await insertShuttlePack(p);
+      await insertShuttlePack(p, userId); // ✅ Passed userId
       await refresh();
     },
     addExpense: async (e: Expense) => {
-      await insertExpense(e);
+      await insertExpense(e, userId); // ✅ Passed userId
       await refresh();
     },
     refresh,
-  }), [state, ready, refresh]);
+  }), [state, ready, refresh, userId]);
 
   if (!ready) return null;
   return <AppCtx.Provider value={api}>{children}</AppCtx.Provider>;

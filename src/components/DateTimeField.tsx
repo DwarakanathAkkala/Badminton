@@ -70,8 +70,7 @@ export default function DateTimeField({ label, value, onChange, mode = 'date' }:
   }
 
   // ---- NATIVE: tap → open picker popup ----
-  const onNativeChange = (event: DateTimePickerEvent, selected?: Date) => {
-    // Android fires "dismissed" when user cancels
+  const onNativeChange = (event: any, selected?: Date) => {
     if (Platform.OS === 'android') setShow(false);
     if (event.type === 'set' && selected) {
       onChange(selected);
@@ -85,12 +84,22 @@ export default function DateTimeField({ label, value, onChange, mode = 'date' }:
         <Text style={styles.fieldText}>{displayText}</Text>
         <Text style={styles.chevron}>{mode === 'date' ? '📅' : '🕒'}</Text>
       </Pressable>
-      {show && (
+        {show && (
         <DateTimePicker
           value={value}
           mode={mode}
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          onChange={onNativeChange}
+          onValueChange={(_event, date) => {
+            // ✅ Pass the selected date directly
+            if (date) {
+              onChange(date);
+            }
+            // On Android, close the picker after selection
+            if (Platform.OS === 'android') {
+              setShow(false);
+            }
+          }}
+          onDismiss={() => setShow(false)}
         />
       )}
     </View>

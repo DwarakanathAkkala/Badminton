@@ -9,7 +9,15 @@ import Card from '../components/Card';
 import DateTimeField from '../components/DateTimeField';
 import DurationPicker from '../components/DurationPicker';
 import { ExtraExpense, Game, PlayerPayment } from '../types';
-import { uid } from '../db/database';
+
+// ✅ Safe UUID generator that works everywhere (no crypto required)
+const generateUUID = (): string => {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+    const r = (Math.random() * 16) | 0,
+      v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
 
 export default function NewGameScreen({ navigation }: NativeStackScreenProps<RootStack, 'NewGame'>) {
   const { state, addGame, addPlayer } = useApp();
@@ -39,18 +47,21 @@ export default function NewGameScreen({ navigation }: NativeStackScreenProps<Roo
 
   const createInlinePlayer = async () => {
     if (!newPlayerName.trim()) return;
-    const id = uid();
-    await addPlayer({
-      id,
-      name: newPlayerName.trim(),
-      phone: newPlayerPhone.trim() || undefined,
-      createdAt: new Date().toISOString(),
-    });
-    // auto-select the new player
-    setSelected(s => [...s, id]);
-    setNewPlayerName('');
-    setNewPlayerPhone('');
-    setShowAddPlayer(false);
+    try {
+      const id = generateUUID(); 
+      await addPlayer({
+        id,
+        name: newPlayerName.trim(),
+        phone: newPlayerPhone.trim() || undefined,
+        createdAt: new Date().toISOString(),
+      });
+      setSelected(s => [...s, id]);
+      setNewPlayerName('');
+      setNewPlayerPhone('');
+      setShowAddPlayer(false);
+    } catch (err) {
+      console.error("Error adding player:", err);
+    }
   };
 
   const total =
@@ -60,37 +71,43 @@ export default function NewGameScreen({ navigation }: NativeStackScreenProps<Roo
   const share = selected.length ? total / selected.length : 0;
 
   const save = async () => {
-    const payments: PlayerPayment[] = selected.map(id => ({
-      playerId: id,
-      amount: 0,
-      paid: false,
-    }));
-    const g: Game = {
-      id: uid(),
-      date: when.toISOString(),
-      courtName: courtName || 'Court',
-      numCourts: Number(numCourts || 1),
-      durationMinutes: duration,
-      playerIds: selected,
-      hostId: state.myPlayerId,
-      courtCost: Number(courtCost || 0),
-      shuttlesUsed: Number(shuttlesUsed || 0),
-      shuttleAmountCollected: Number(shuttleAmount || 0),
-      extraExpenses: extras,
-      payments,
-      shuttlePackId,
-      shuttleBroken,
-      completed: false,
-      createdAt: new Date().toISOString(),
-    };
-    await addGame(g);
-    navigation.goBack();
+    try {
+      const payments: PlayerPayment[] = selected.map(id => ({
+        playerId: id,
+        amount: 0,
+        paid: false,
+      }));
+      const g: Game = {
+        id: generateUUID(), 
+        date: when.toISOString(),
+        courtName: courtName || 'Court',
+        numCourts: Number(numCourts || 1),
+        durationMinutes: duration,
+        playerIds: selected,
+        hostId: state.myPlayerId,
+        courtCost: Number(courtCost || 0),
+        shuttlesUsed: Number(shuttlesUsed || 0),
+        shuttleAmountCollected: Number(shuttleAmount || 0),
+        extraExpenses: extras,
+        payments,
+        shuttlePackId,
+        shuttleBroken,
+        completed: false,
+        createdAt: new Date().toISOString(),
+      };
+      await addGame(g);
+      navigation.goBack();
+    } catch (err) {
+      console.error("Error saving game:", err);
+    }
   };
 
   return (
     <ScrollView
       contentContainerStyle={{ padding: 16, maxWidth: 900, alignSelf: 'center', width: '100%' }}
       keyboardShouldPersistTaps="handled">
+      
+      {/* ---------------- COURT DETAILS ---------------- */}
       <Card>
         <Field label="Venue" value={courtName} onChangeText={setCourtName} placeholder="Court name" />
         <DateTimeField label="Date" value={when} onChange={setWhen} mode="date" />
@@ -111,6 +128,7 @@ export default function NewGameScreen({ navigation }: NativeStackScreenProps<Roo
         <Field label="Court Cost (₹)" value={courtCost} onChangeText={setCourtCost} keyboardType="numeric" />
       </Card>
 
+      {/* ---------------- SHUTTLES ---------------- */}
       <Card>
         <Text style={styles.title}>Shuttles</Text>
         <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -161,6 +179,7 @@ export default function NewGameScreen({ navigation }: NativeStackScreenProps<Roo
         </Pressable>
       </Card>
 
+      {/* ---------------- PLAYERS ---------------- */}
       <Card>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Text style={styles.title}>Players ({selected.length} selected)</Text>
@@ -216,6 +235,7 @@ export default function NewGameScreen({ navigation }: NativeStackScreenProps<Roo
         </View>
       </Card>
 
+      {/* ---------------- EXTRA EXPENSES ---------------- */}
       <Card>
         <Text style={styles.title}>Extra Expenses</Text>
         {extras.map(e => (
@@ -234,13 +254,14 @@ export default function NewGameScreen({ navigation }: NativeStackScreenProps<Roo
           variant="ghost"
           onPress={() => {
             if (!extraLabel || !extraAmt) return;
-            setExtras(x => [...x, { id: uid(), label: extraLabel, amount: Number(extraAmt) }]);
+            setExtras(x => [...x, { id: generateUUID(), label: extraLabel, amount: Number(extraAmt) }]);
             setExtraLabel('');
             setExtraAmt('');
           }}
         />
       </Card>
 
+      {/* ---------------- SUMMARY & SAVE ---------------- */}
       <Card>
         <Text style={styles.title}>Summary</Text>
         <Text>Total: ₹{total.toFixed(0)}</Text>
